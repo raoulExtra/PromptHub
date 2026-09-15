@@ -372,7 +372,7 @@
         .modal-overlay.active { opacity: 1; visibility: visible; }
 
         .dialog {
-            width: 400px;
+            width: 460px;
             background: var(--surface-2);
             border: 1px solid var(--border-2);
             border-radius: 10px;
@@ -528,3 +528,53 @@
         .spin { animation: spin 0.8s linear infinite; }
 
         @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+        .tag-input-wrap {
+            min-height: 42px;
+            background: var(--surface-4);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+        .tag-input-wrap:focus-within { border-color: var(--primary); background: var(--surface-3); }
+        .tag-chips { display: contents; }
+        .tag-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--primary-dim);
+            color: var(--primary);
+            border: 1px solid rgba(232,255,71,0.25);
+            border-radius: 100px;
+            padding: 3px 8px 3px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+        }
+        .tag-chip-x {
+            background: transparent;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0 2px;
+            opacity: 0.7;
+        }
+        .tag-chip-x:hover { opacity: 1; }
+        .tag-input-wrap input {
+            flex: 1;
+            min-width: 140px;
+            background: transparent !important;
+            border: none !important;
+            padding: 4px 4px !important;
+        }
+        .field-hint {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-3);
+        }

@@ -9,7 +9,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const promptNameInput = document.getElementById('promptName');
         const promptTagSelect = document.getElementById('promptTag');
         const promptCategorySelect = document.getElementById('promptCategory');
+        const promptTagsInput = document.getElementById('promptTags');
+        const tagChips = document.getElementById('tagChips');
         const toast = document.getElementById('toast');
+        let customTags = [];
         const charStatus = document.getElementById('charStatus');
         const wordStatus = document.getElementById('wordStatus');
         const positionStatus = document.getElementById('positionStatus');
@@ -93,9 +96,34 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => promptNameInput.focus(), 100);
         }
 
+        function renderTagChips() {
+            tagChips.innerHTML = customTags.map((tag, i) =>
+                `<span class="tag-chip">${escapeHtml(tag)}<button type="button" class="tag-chip-x" data-index="${i}" aria-label="Remove tag">×</button></span>`
+            ).join('');
+        }
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function addTag(raw) {
+            const name = raw.trim().replace(/^#+/, '');
+            if (!name) return;
+            if (customTags.some(t => t.toLowerCase() === name.toLowerCase())) return;
+            customTags.push(name);
+            renderTagChips();
+        }
+
         function closeModal() {
             saveModal.classList.remove('active');
             saveForm.reset();
+            customTags = [];
+            renderTagChips();
         }
 
         function shakeButton() {
@@ -110,14 +138,44 @@ document.addEventListener('DOMContentLoaded', function () {
         saveModal.addEventListener('click', e => { if (e.target === saveModal) closeModal(); });
         document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
+        tagChips.addEventListener('click', e => {
+            const btn = e.target.closest('.tag-chip-x');
+            if (!btn) return;
+            customTags.splice(Number(btn.dataset.index), 1);
+            renderTagChips();
+        });
+
+        promptTagsInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                addTag(promptTagsInput.value);
+                promptTagsInput.value = '';
+            } else if (e.key === 'Backspace' && !promptTagsInput.value && customTags.length) {
+                customTags.pop();
+                renderTagChips();
+            }
+        });
+        promptTagsInput.addEventListener('blur', () => {
+            if (promptTagsInput.value.trim()) {
+                addTag(promptTagsInput.value);
+                promptTagsInput.value = '';
+            }
+        });
+
         saveForm.addEventListener('submit', async function (e) {
             e.preventDefault();
+
+            if (promptTagsInput.value.trim()) {
+                addTag(promptTagsInput.value);
+                promptTagsInput.value = '';
+            }
 
             const promptData = {
                 title: promptNameInput.value.trim(),
                 body: textarea.value.trim(),
                 favorite: promptTagSelect.value === 'favorite' ? 'Favorite' : 'Not favorite',
-                type: promptCategorySelect.value === 'system' ? 'System prompt' : 'User prompt'
+                type: promptCategorySelect.value === 'system' ? 'System prompt' : 'User prompt',
+                tags: customTags.slice()
             };
 
             const originalHTML = saveButton.innerHTML;
@@ -139,6 +197,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     closeModal();
                     textarea.value = '';
                     saveForm.reset();
+                    customTags = [];
+                    renderTagChips();
                     updateLineNumbers(); updateStats(); updateMinimap();
 
                     toast.querySelector('span').textContent = `"${promptData.title}" saved!`;

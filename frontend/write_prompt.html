@@ -155,7 +155,7 @@
                     </div>
                     <div class="field-row">
                         <div class="field">
-                            <label class="field-label" for="promptTag">Tag</label>
+                            <label class="field-label" for="promptTag">Favorite</label>
                             <select id="promptTag" name="promptTag" required>
                                 <option value="favorite">⭐ Favorite</option>
                                 <option value="not-favorite">· Not Favorite</option>
@@ -168,6 +168,14 @@
                                 <option value="user">User Prompt</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="field">
+                        <label class="field-label" for="promptTags">Custom tags</label>
+                        <div class="tag-input-wrap" id="tagInputWrap">
+                            <div id="tagChips" class="tag-chips"></div>
+                            <input type="text" id="promptTags" name="promptTags" placeholder="Type a tag, then Enter or comma" autocomplete="off">
+                        </div>
+                        <div class="field-hint">Create your own tags (e.g. coding, agent, rag). They appear in Library filters.</div>
                     </div>
                 </div>
                 <div class="dialog-footer">
