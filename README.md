@@ -40,7 +40,7 @@ Every AI power user faces the same friction: great prompts get lost in notes app
 ## ✨ Features
 
 * **⚡ Instant Capture:** Write and save prompts with zero friction.
-* **🏷️ Smart Tagging:** Mark favorites and categorize as System or User prompts.
+* **🏷️ Smart Tagging:** Mark favorites, categorize as System or User, and add your own custom tags (filterable in the library).
 * **🔍 Fast Search:** Find prompts by title or content instantly.
 * **📋 One-Click Copy:** Copy prompt body to clipboard immediately.
 * **🖥️ Native Experience:** PyWebView wrapper provides a real app window, not a browser tab.

@@ -6,6 +6,7 @@ const API_URL = "/api";
 
     const listContainer = document.getElementById('listContainer');
     const filterTag = document.getElementById('filterTag');
+    const filterCustomTag = document.getElementById('filterCustomTag');
     const filterCategory = document.getElementById('filterCategory');
     const searchInput = document.getElementById('searchInput');
     const totalCount = document.getElementById('totalCount');
@@ -34,9 +35,11 @@ const API_URL = "/api";
     async function fetchPrompts() {
         const params = new URLSearchParams();
         const tagValue = filterTag.value;
+        const customTagValue = filterCustomTag.value;
         const catValue = filterCategory.value;
         const searchValue = searchInput.value;
         if (tagValue && tagValue !== 'all') params.append('tag', tagValue);
+        if (customTagValue && customTagValue !== 'all') params.append('custom_tag', customTagValue);
         if (catValue && catValue !== 'all') params.append('category', catValue);
         if (searchValue) params.append('search', searchValue);
 
@@ -134,6 +137,7 @@ const API_URL = "/api";
                             ${item.favorite === 'Favorite' ? '★ ' : ''}${item.favorite}
                         </span>
                         <span class="badge ${getBadgeClass('type', item.type)}">${item.type}</span>
+                        ${(item.tags || []).map(t => `<span class="badge badge-tag">${escapeHtml(t)}</span>`).join('')}
                     </div>
                 </div>`;
             listContainer.appendChild(card);
@@ -146,9 +150,11 @@ const API_URL = "/api";
         modalTitle.innerText = item.title;
         modalBody.innerText = item.body;
 
+        const customTagBadges = (item.tags || []).map(t => `<span class="badge badge-tag">${escapeHtml(t)}</span>`).join('');
         modalBadges.innerHTML = `
             <span class="badge ${getBadgeClass('favorite', item.favorite)}">${item.favorite}</span>
             <span class="badge ${getBadgeClass('type', item.type)}">${item.type}</span>
+            ${customTagBadges}
             <span class="modal-date"><i class="fa-regular fa-calendar" style="margin-right:4px;"></i>${item.date}</span>`;
 
         modalOverlay.classList.remove('hidden');
@@ -226,7 +232,30 @@ const API_URL = "/api";
     }
 
     // ── Events ──
+    async function loadTagOptions() {
+        try {
+            const response = await fetch(`${API_URL}/tags`);
+            const tags = await response.json();
+            const current = filterCustomTag.value || 'all';
+            filterCustomTag.innerHTML = '<option value="all">All Tags</option>' +
+                tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+            filterCustomTag.value = tags.some(t => t === current) ? current : 'all';
+        } catch (error) {
+            console.error('Error loading tags:', error);
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     filterTag.addEventListener('change', fetchPrompts);
+    filterCustomTag.addEventListener('change', fetchPrompts);
     filterCategory.addEventListener('change', fetchPrompts);
     searchInput.addEventListener('input', debounce(fetchPrompts, 300));
     closeModalBtn.addEventListener('click', closeViewModal);
@@ -256,4 +285,4 @@ const API_URL = "/api";
         };
     }
 
-    fetchPrompts();
+    loadTagOptions().then(fetchPrompts);
