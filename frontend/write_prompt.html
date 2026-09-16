@@ -170,6 +170,17 @@
                         </div>
                     </div>
                     <div class="field">
+                        <label class="field-label" for="promptCriticality">Criticality</label>
+                        <select id="promptCriticality" name="promptCriticality">
+                            <option value="normal">Normal</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <div class="field-hint">Used to order system/agent prompts in the derived agent prompt feed.</div>
+                    </div>
+                    <div class="field">
                         <label class="field-label" for="promptTags">Custom tags</label>
                         <div class="tag-input-wrap" id="tagInputWrap">
                             <div id="tagChips" class="tag-chips"></div>

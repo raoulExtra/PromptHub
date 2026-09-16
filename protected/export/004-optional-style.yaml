@@ -1,0 +1,10 @@
+id: 4
+title: "Optional style"
+date: "2026-09-16"
+favorite: "Not favorite"
+type: "System prompt"
+criticality: low
+updated_at: "2026-09-16"
+tags: ["criticality:low", "data:demo", "governance:system_instruction"]
+body: |
+  Prefer helpful examples when useful.

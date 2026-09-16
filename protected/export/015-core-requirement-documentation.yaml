@@ -1,0 +1,10 @@
+id: 15
+title: "Core requirement documentation"
+date: "2026-09-16"
+favorite: "Not favorite"
+type: "System prompt"
+criticality: high
+updated_at: "2026-09-16"
+tags: ["criticality:high", "data:demo", "governance:system_instruction"]
+body: |
+  In docs create ###-CREQ-<title>.md files describing all core requirements of our code and db with acc criterias.

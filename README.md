@@ -41,12 +41,27 @@ Every AI power user faces the same friction: great prompts get lost in notes app
 
 * **⚡ Instant Capture:** Write and save prompts with zero friction.
 * **🏷️ Smart Tagging:** Mark favorites, categorize as System or User, and add your own custom tags (filterable in the library).
+* **🎚️ Criticality-aware agents:** Assign `normal`, `low`, `medium`, `high`, or `critical` priority to prompts and derive an ordered system/agent prompt feed.
 * **🔍 Fast Search:** Find prompts by title or content instantly.
 * **📋 One-Click Copy:** Copy prompt body to clipboard immediately.
 * **🖥️ Native Experience:** PyWebView wrapper provides a real app window, not a browser tab.
 * **💾 Truly Local:** All data lives in a single `prompthub.db` file on your machine.
 
 ---
+
+## 🔌 Agent prompt feed
+
+System and agent prompts can be selected with a criticality tag such as `criticality:high`.
+The API derives the level from tags and returns the highest-priority prompts first:
+
+```text
+GET /api/prompts/agent
+GET /api/prompts/agent?criticality=critical
+```
+
+The underlying SQLite view is named `agent_prompts`, so other Python/SQLite integrations
+can consume the same derived ordering. Prompts without a criticality tag are treated as
+`normal`.
 
 ## 🛠️ Tech Stack
 

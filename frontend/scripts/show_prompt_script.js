@@ -7,6 +7,7 @@ const API_URL = "/api";
     const listContainer = document.getElementById('listContainer');
     const filterTag = document.getElementById('filterTag');
     const filterCustomTag = document.getElementById('filterCustomTag');
+    const filterCriticality = document.getElementById('filterCriticality');
     const filterCategory = document.getElementById('filterCategory');
     const searchInput = document.getElementById('searchInput');
     const totalCount = document.getElementById('totalCount');
@@ -36,10 +37,12 @@ const API_URL = "/api";
         const params = new URLSearchParams();
         const tagValue = filterTag.value;
         const customTagValue = filterCustomTag.value;
+        const criticalityValue = filterCriticality.value;
         const catValue = filterCategory.value;
         const searchValue = searchInput.value;
         if (tagValue && tagValue !== 'all') params.append('tag', tagValue);
         if (customTagValue && customTagValue !== 'all') params.append('custom_tag', customTagValue);
+        if (criticalityValue && criticalityValue !== 'all') params.append('criticality', criticalityValue);
         if (catValue && catValue !== 'all') params.append('category', catValue);
         if (searchValue) params.append('search', searchValue);
 
@@ -95,6 +98,7 @@ const API_URL = "/api";
     function getBadgeClass(type, value) {
         if (type === 'favorite') return value === 'Favorite' ? 'badge-fav' : 'badge-nfav';
         if (type === 'type') return value === 'User prompt' ? 'badge-user' : 'badge-sys';
+        if (type === 'criticality') return `badge-criticality-${value}`;
         return '';
     }
 
@@ -137,7 +141,8 @@ const API_URL = "/api";
                             ${item.favorite === 'Favorite' ? '★ ' : ''}${item.favorite}
                         </span>
                         <span class="badge ${getBadgeClass('type', item.type)}">${item.type}</span>
-                        ${(item.tags || []).map(t => `<span class="badge badge-tag">${escapeHtml(t)}</span>`).join('')}
+                        <span class="badge ${getBadgeClass('criticality', item.criticality)}">${item.criticality}</span>
+                        ${(item.tags || []).filter(t => !/^criticality:/i.test(t)).map(t => `<span class="badge badge-tag">${escapeHtml(t)}</span>`).join('')}
                     </div>
                 </div>`;
             listContainer.appendChild(card);
@@ -150,10 +155,12 @@ const API_URL = "/api";
         modalTitle.innerText = item.title;
         modalBody.innerText = item.body;
 
-        const customTagBadges = (item.tags || []).map(t => `<span class="badge badge-tag">${escapeHtml(t)}</span>`).join('');
+        const customTagBadges = (item.tags || []).filter(t => !/^criticality:/i.test(t)).map(t => `<span class="badge badge-tag">${escapeHtml(t)}</span>`).join('');
+        const criticalityBadge = `<span class="badge ${getBadgeClass('criticality', item.criticality)}">${item.criticality}</span>`;
         modalBadges.innerHTML = `
             <span class="badge ${getBadgeClass('favorite', item.favorite)}">${item.favorite}</span>
             <span class="badge ${getBadgeClass('type', item.type)}">${item.type}</span>
+            ${criticalityBadge}
             ${customTagBadges}
             <span class="modal-date"><i class="fa-regular fa-calendar" style="margin-right:4px;"></i>${item.date}</span>`;
 
@@ -256,6 +263,7 @@ const API_URL = "/api";
 
     filterTag.addEventListener('change', fetchPrompts);
     filterCustomTag.addEventListener('change', fetchPrompts);
+    filterCriticality.addEventListener('change', fetchPrompts);
     filterCategory.addEventListener('change', fetchPrompts);
     searchInput.addEventListener('input', debounce(fetchPrompts, 300));
     closeModalBtn.addEventListener('click', closeViewModal);

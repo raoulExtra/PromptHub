@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const promptNameInput = document.getElementById('promptName');
         const promptTagSelect = document.getElementById('promptTag');
         const promptCategorySelect = document.getElementById('promptCategory');
+        const promptCriticalitySelect = document.getElementById('promptCriticality');
         const promptTagsInput = document.getElementById('promptTags');
         const tagChips = document.getElementById('tagChips');
         const toast = document.getElementById('toast');
@@ -170,12 +171,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 promptTagsInput.value = '';
             }
 
+            // Keep criticality machine-readable while preserving the user's tags.
+            const tags = customTags.filter(tag => !/^criticality:/i.test(tag));
+            tags.push(`criticality:${promptCriticalitySelect.value}`);
             const promptData = {
                 title: promptNameInput.value.trim(),
                 body: textarea.value.trim(),
                 favorite: promptTagSelect.value === 'favorite' ? 'Favorite' : 'Not favorite',
                 type: promptCategorySelect.value === 'system' ? 'System prompt' : 'User prompt',
-                tags: customTags.slice()
+                tags
             };
 
             const originalHTML = saveButton.innerHTML;

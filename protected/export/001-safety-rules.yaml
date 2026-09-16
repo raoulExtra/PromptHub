@@ -1,0 +1,10 @@
+id: 1
+title: "Safety rules"
+date: "2026-09-16"
+favorite: "Not favorite"
+type: "System prompt"
+criticality: critical
+updated_at: "2026-09-16"
+tags: ["criticality:critical", "data:demo", "governance:system_instruction"]
+body: |
+  Do not read from the protected folder or any of its subfolders.

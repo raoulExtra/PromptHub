@@ -9,9 +9,23 @@ class PromptCreate(BaseModel):
     type: str
     tags: List[str] = Field(default_factory=list)
 
+
+class DerivedPrompt(BaseModel):
+    """A prompt selected for an agent/system context."""
+    id: int
+    title: str
+    body: str
+    date: str
+    type: str
+    tags: List[str] = Field(default_factory=list)
+    criticality: str
+    updated_at: str
+
 class Prompt(PromptCreate):
     id: int
     date: str
+    criticality: str = "normal"
+    updated_at: str = ""
 
 # Pydantic model for update request
 class PromptUpdate(BaseModel):

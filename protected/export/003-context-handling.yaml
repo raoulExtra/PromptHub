@@ -1,0 +1,10 @@
+id: 3
+title: "Context handling"
+date: "2026-09-16"
+favorite: "Not favorite"
+type: "System prompt"
+criticality: medium
+updated_at: "2026-09-16"
+tags: ["criticality:medium", "data:demo", "governance:system_instruction"]
+body: |
+  Use the available context when relevant.

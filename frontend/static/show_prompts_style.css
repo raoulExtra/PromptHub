@@ -372,6 +372,11 @@
         .badge-user { background: rgba(96,165,250,0.1); color: var(--blue); border-color: rgba(96,165,250,0.2); }
         .badge-sys { background: rgba(192,132,252,0.1); color: var(--purple); border-color: rgba(192,132,252,0.2); }
         .badge-tag { background: rgba(232,255,71,0.08); color: var(--primary); border-color: rgba(232,255,71,0.22); text-transform: none; letter-spacing: 0.02em; }
+        .badge-criticality-critical { background: rgba(248,113,113,0.15); color: var(--red); border-color: rgba(248,113,113,0.35); }
+        .badge-criticality-high { background: rgba(251,146,60,0.15); color: var(--orange); border-color: rgba(251,146,60,0.35); }
+        .badge-criticality-medium { background: rgba(250,204,21,0.12); color: #facc15; border-color: rgba(250,204,21,0.3); }
+        .badge-criticality-low { background: rgba(96,165,250,0.1); color: var(--blue); border-color: rgba(96,165,250,0.25); }
+        .badge-criticality-normal { background: rgba(255,255,255,0.05); color: var(--text-3); border-color: var(--border); }
 
         .empty-state {
             display: flex;

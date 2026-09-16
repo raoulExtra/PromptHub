@@ -3,10 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 import sqlite3
 import os
-from backend.schema_models.schema_models import Prompt, PromptCreate, PromptUpdate
+from backend.schema_models.schema_models import (
+    DerivedPrompt, Prompt, PromptCreate, PromptUpdate,
+)
 
 
 app = FastAPI(title="PromptHub API")
@@ -25,7 +27,8 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS PromptHub (
                 date DATE NOT NULL,
                 tag VARCHAR(50),
                 category VARCHAR(50) NOT NULL,
-                tags TEXT NOT NULL DEFAULT ''
+                tags TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
     );""")
 conn.commit()
 
@@ -33,6 +36,29 @@ existing_cols = {row[1] for row in cursor.execute("PRAGMA table_info(PromptHub)"
 if "tags" not in existing_cols:
     cursor.execute("ALTER TABLE PromptHub ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
     conn.commit()
+if "updated_at" not in existing_cols:
+    cursor.execute("ALTER TABLE PromptHub ADD COLUMN updated_at TEXT")
+    cursor.execute("UPDATE PromptHub SET updated_at = date WHERE updated_at IS NULL")
+    conn.commit()
+
+# Criticality is deliberately derived from tags so old databases and arbitrary
+# user tags remain compatible.  The view is also useful to SQL consumers.
+cursor.execute("""CREATE VIEW IF NOT EXISTS agent_prompts AS
+    SELECT id, prompt_name, prompt_body, date, category, tags,
+           CASE
+             WHEN (',' || lower(tags) || ',') LIKE '%,criticality:critical,%' THEN 4
+             WHEN (',' || lower(tags) || ',') LIKE '%,criticality:high,%' THEN 3
+             WHEN (',' || lower(tags) || ',') LIKE '%,criticality:medium,%' THEN 2
+             WHEN (',' || lower(tags) || ',') LIKE '%,criticality:low,%' THEN 1
+             ELSE 0
+           END AS criticality_rank
+    FROM PromptHub
+    WHERE lower(category) IN ('system prompt', 'agent prompt')
+""")
+conn.commit()
+
+
+CRITICALITY_LEVELS = {"normal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
 
 def parse_tags(raw) -> List[str]:
@@ -60,6 +86,17 @@ def tags_to_db(tags) -> str:
     return ",".join(parse_tags(tags))
 
 
+def criticality_from_tags(tags) -> str:
+    """Return the highest ``criticality:<level>`` tag, defaulting to normal."""
+    selected = "normal"
+    for tag in parse_tags(tags):
+        prefix, separator, value = tag.partition(":")
+        if prefix.lower() == "criticality" and separator and value.lower() in CRITICALITY_LEVELS:
+            if CRITICALITY_LEVELS[value.lower()] > CRITICALITY_LEVELS[selected]:
+                selected = value.lower()
+    return selected
+
+
 def row_to_prompt(d) -> dict:
     return {
         "id": d[0],
@@ -69,6 +106,8 @@ def row_to_prompt(d) -> dict:
         "favorite": d[4],
         "type": d[5],
         "tags": parse_tags(d[6] if len(d) > 6 else ""),
+        "criticality": criticality_from_tags(d[6] if len(d) > 6 else ""),
+        "updated_at": d[7] if len(d) > 7 else d[3],
     }
 
 
@@ -93,6 +132,9 @@ def list_tags():
     out = []
     for (raw,) in rows:
         for tag in parse_tags(raw):
+            # Criticality has its own filter and should not pollute custom tags.
+            if tag.lower().startswith("criticality:"):
+                continue
             key = tag.lower()
             if key not in seen:
                 seen.add(key)
@@ -106,6 +148,7 @@ def get_prompts(
     tag: Optional[str] = None,
     category: Optional[str] = None,
     custom_tag: Optional[str] = None,
+    criticality: Optional[str] = None,
     search: Optional[str] = None
 ):
 
@@ -123,6 +166,9 @@ def get_prompts(
         needle = custom_tag.lower()
         result = [p for p in result if needle in [t.lower() for t in p["tags"]]]
 
+    if criticality and criticality != "all":
+        result = [p for p in result if p["criticality"] == criticality.lower()]
+
     if search:
         search_lower = search.lower()
         result = [
@@ -134,6 +180,35 @@ def get_prompts(
 
     return result
 
+
+@app.get("/api/prompts/agent", response_model=List[DerivedPrompt])
+def get_agent_prompts(criticality: Optional[str] = None):
+    """Return system/agent prompts in criticality order for prompt assembly.
+
+    Add tags such as ``criticality:high`` or ``criticality:critical`` to a
+    prompt. Prompts with equal criticality retain newest-first ordering.
+    """
+    if criticality and criticality.lower() not in CRITICALITY_LEVELS:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="criticality must be normal, low, medium, high, or critical")
+
+    rows = cursor.execute("""
+        SELECT id, prompt_name, prompt_body, date, category, tags, criticality_rank,
+               (SELECT updated_at FROM PromptHub WHERE PromptHub.id = agent_prompts.id)
+        FROM agent_prompts
+        ORDER BY criticality_rank DESC, date DESC, id DESC
+    """).fetchall()
+    prompts = [{
+        "id": row[0], "title": row[1], "body": row[2], "date": row[3],
+        "type": row[4], "tags": parse_tags(row[5]),
+        "criticality": criticality_from_tags(row[5]),
+        "updated_at": row[7] or row[3],
+    } for row in rows]
+    if criticality:
+        prompts = [p for p in prompts if p["criticality"] == criticality.lower()]
+    return prompts
+
+
 @app.post("/api/prompts", response_model=Prompt)
 def create_prompt(prompt: PromptCreate):
     """Create a new prompt"""
@@ -141,9 +216,10 @@ def create_prompt(prompt: PromptCreate):
     tags = parse_tags(prompt.tags)
 
     cursor.execute("""
-        INSERT INTO PromptHub (prompt_name, prompt_body, date, tag, category, tags)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (prompt.title, prompt.body, date_str, prompt.favorite, prompt.type, tags_to_db(tags)))
+        INSERT INTO PromptHub (prompt_name, prompt_body, date, tag, category, tags, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (prompt.title, prompt.body, date_str, prompt.favorite, prompt.type,
+          tags_to_db(tags), datetime.now().isoformat(timespec="seconds")))
 
     conn.commit()
 
@@ -157,6 +233,7 @@ def create_prompt(prompt: PromptCreate):
         "type": prompt.type,
         "date": date_str,
         "tags": tags,
+        "criticality": criticality_from_tags(tags),
     }
 
 
@@ -171,7 +248,8 @@ def delete_prompt(prompt_id: int):
 @app.put("/api/prompts/{prompt_id}")
 def update_prompt(prompt_id: int, prompt_update: PromptUpdate):
     """Update a prompt body by ID - prints values to console"""
-    cursor.execute("UPDATE PromptHub SET prompt_body = ? WHERE id = ?",(prompt_update.body, prompt_id))
+    cursor.execute("UPDATE PromptHub SET prompt_body = ?, updated_at = ? WHERE id = ?",
+                   (prompt_update.body, datetime.now().isoformat(timespec="seconds"), prompt_id))
     conn.commit()
 
     return {
