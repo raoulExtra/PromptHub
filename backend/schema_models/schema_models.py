@@ -30,3 +30,15 @@ class Prompt(PromptCreate):
 # Pydantic model for update request
 class PromptUpdate(BaseModel):
     body: str
+    type: str | None = None
+    tags: list[str] | None = None
+
+
+class TagCreate(BaseModel):
+    name: str
+    color: str | None = None
+
+
+class TagUpdate(BaseModel):
+    new_name: str | None = None
+    color: str | None = None

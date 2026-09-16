@@ -3,13 +3,19 @@ const API_URL = "/api";
     let data = [];
     let currentItemId = null;
     let currentItemBody = "";
+    let currentItemType = "System prompt";
+    let currentItemTags = [];
+    let tagColors = {};
 
     const listContainer = document.getElementById('listContainer');
     const filterTag = document.getElementById('filterTag');
     const filterCustomTag = document.getElementById('filterCustomTag');
+    const assignTagSelect = document.getElementById('assignTagSelect');
     const filterCriticality = document.getElementById('filterCriticality');
     const filterCategory = document.getElementById('filterCategory');
     const searchInput = document.getElementById('searchInput');
+    const promptWildcardSearch = document.getElementById('promptWildcardSearch');
+    const promptSearchBtn = document.getElementById('promptSearchBtn');
     const totalCount = document.getElementById('totalCount');
 
     const modalOverlay = document.getElementById('modalOverlay');
@@ -26,6 +32,8 @@ const API_URL = "/api";
     const editModalOverlay = document.getElementById('editModalOverlay');
     const editModalContent = document.getElementById('editModalContent');
     const editTextarea = document.getElementById('editTextarea');
+    const editTypeSelect = document.getElementById('editTypeSelect');
+    const editTagsInput = document.getElementById('editTagsInput');
     const closeEditModalBtn = document.getElementById('closeEditModalBtn');
     const cancelEditBtn = document.getElementById('cancelEditBtn');
     const updateBtn = document.getElementById('updateBtn');
@@ -39,7 +47,7 @@ const API_URL = "/api";
         const customTagValue = filterCustomTag.value;
         const criticalityValue = filterCriticality.value;
         const catValue = filterCategory.value;
-        const searchValue = searchInput.value;
+        const searchValue = promptWildcardSearch.value || searchInput.value;
         if (tagValue && tagValue !== 'all') params.append('tag', tagValue);
         if (customTagValue && customTagValue !== 'all') params.append('custom_tag', customTagValue);
         if (criticalityValue && criticalityValue !== 'all') params.append('criticality', criticalityValue);
@@ -68,12 +76,12 @@ const API_URL = "/api";
         }
     }
 
-    async function updatePromptAPI(id, body) {
+    async function updatePromptAPI(id, body, type, tags) {
         try {
             const response = await fetch(`${API_URL}/prompts/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ body })
+                body: JSON.stringify({ body, type, tags })
             });
             if (response.ok) {
                 showToast('Prompt updated');
@@ -93,6 +101,13 @@ const API_URL = "/api";
     function truncateText(text, wordCount = 9) {
         const words = text.split(' ');
         return words.length > wordCount ? words.slice(0, wordCount).join(' ') + '...' : text;
+    }
+
+    function tagStyle(tag) {
+        const color = tagColors[tag.toLowerCase()];
+        return color && /^#[0-9a-f]{3,8}$/i.test(color)
+            ? ` style="color:${color};border-color:${color};"`
+            : '';
     }
 
     function getBadgeClass(type, value) {
@@ -134,6 +149,7 @@ const API_URL = "/api";
                         <div class="card-text">
                             <div class="card-title">${item.title}</div>
                             <div class="card-preview">${truncateText(item.body)}</div>
+                            <div class="card-date">Updated ${escapeHtml(item.updated_at || item.date)}</div>
                         </div>
                     </div>
                     <div class="card-badges">
@@ -142,7 +158,7 @@ const API_URL = "/api";
                         </span>
                         <span class="badge ${getBadgeClass('type', item.type)}">${item.type}</span>
                         <span class="badge ${getBadgeClass('criticality', item.criticality)}">${item.criticality}</span>
-                        ${(item.tags || []).filter(t => !/^criticality:/i.test(t)).map(t => `<span class="badge badge-tag">${escapeHtml(t)}</span>`).join('')}
+                        ${(item.tags || []).filter(t => !/^criticality:/i.test(t)).map(t => `<span class="badge badge-tag"${tagStyle(t)}>${escapeHtml(t)}</span>`).join('')}
                     </div>
                 </div>`;
             listContainer.appendChild(card);
@@ -152,17 +168,21 @@ const API_URL = "/api";
     function openModal(item) {
         currentItemId = item.id;
         currentItemBody = item.body;
+        currentItemType = item.type;
+        currentItemTags = [...(item.tags || [])];
+        editTagsInput.value = currentItemTags.join(', ');
         modalTitle.innerText = item.title;
         modalBody.innerText = item.body;
 
-        const customTagBadges = (item.tags || []).filter(t => !/^criticality:/i.test(t)).map(t => `<span class="badge badge-tag">${escapeHtml(t)}</span>`).join('');
+        const customTagBadges = (item.tags || []).filter(t => !/^criticality:/i.test(t)).map(t => `<span class="badge badge-tag"${tagStyle(t)}>${escapeHtml(t)}</span>`).join('');
         const criticalityBadge = `<span class="badge ${getBadgeClass('criticality', item.criticality)}">${item.criticality}</span>`;
         modalBadges.innerHTML = `
             <span class="badge ${getBadgeClass('favorite', item.favorite)}">${item.favorite}</span>
             <span class="badge ${getBadgeClass('type', item.type)}">${item.type}</span>
             ${criticalityBadge}
             ${customTagBadges}
-            <span class="modal-date"><i class="fa-regular fa-calendar" style="margin-right:4px;"></i>${item.date}</span>`;
+            <span class="modal-date"><i class="fa-regular fa-calendar" style="margin-right:4px;"></i>Created ${item.date}</span>
+            <span class="modal-date"><i class="fa-regular fa-clock" style="margin-right:4px;"></i>Updated ${item.updated_at || item.date}</span>`;
 
         modalOverlay.classList.remove('hidden');
         setTimeout(() => {
@@ -180,11 +200,14 @@ const API_URL = "/api";
             modalOverlay.classList.add('hidden');
             currentItemId = null;
             currentItemBody = "";
+            currentItemType = "System prompt";
+            currentItemTags = [];
         }, 250);
     }
 
     function openEditModal() {
         editTextarea.value = currentItemBody;
+        editTypeSelect.value = currentItemType;
         editModalOverlay.classList.remove('hidden');
         setTimeout(() => {
             editModalOverlay.classList.remove('opacity-0');
@@ -208,7 +231,8 @@ const API_URL = "/api";
     function handleUpdate() {
         const updatedBody = editTextarea.value.trim();
         if (!updatedBody) { showErrorToast('Prompt body cannot be empty'); return; }
-        if (currentItemId !== null) updatePromptAPI(currentItemId, updatedBody);
+        const tags = editTagsInput.value.split(',').map(tag => tag.trim().replace(/^#+/, '')).filter(Boolean);
+        if (currentItemId !== null) updatePromptAPI(currentItemId, updatedBody, editTypeSelect.value, tags);
     }
 
     let toastTimer;
@@ -241,12 +265,16 @@ const API_URL = "/api";
     // ── Events ──
     async function loadTagOptions() {
         try {
-            const response = await fetch(`${API_URL}/tags`);
-            const tags = await response.json();
+            const response = await fetch(`${API_URL}/tags/details`);
+            const details = await response.json();
+            tagColors = Object.fromEntries(details.map(item => [item.name.toLowerCase(), item.color]));
+            const tags = details.map(item => item.name);
             const current = filterCustomTag.value || 'all';
             filterCustomTag.innerHTML = '<option value="all">All Tags</option>' +
-                tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+                details.map(item => `<option value="${escapeHtml(item.name)}"${tagStyle(item.name)}>${escapeHtml(item.name)}</option>`).join('');
             filterCustomTag.value = tags.some(t => t === current) ? current : 'all';
+            assignTagSelect.innerHTML = '<option value="">Assign tag to prompt</option>' +
+                details.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join('');
         } catch (error) {
             console.error('Error loading tags:', error);
         }
@@ -263,9 +291,29 @@ const API_URL = "/api";
 
     filterTag.addEventListener('change', fetchPrompts);
     filterCustomTag.addEventListener('change', fetchPrompts);
+    assignTagSelect.addEventListener('change', async () => {
+        const tag = assignTagSelect.value;
+        if (!currentItemId) return showErrorToast('Open a prompt before assigning a tag');
+        if (!tag) return showErrorToast('Select a tag to assign');
+        if (!currentItemTags.some(item => item.toLowerCase() === tag.toLowerCase())) currentItemTags.push(tag);
+        await updatePromptAPI(currentItemId, currentItemBody, currentItemType, currentItemTags);
+        assignTagSelect.value = '';
+    });
     filterCriticality.addEventListener('change', fetchPrompts);
     filterCategory.addEventListener('change', fetchPrompts);
     searchInput.addEventListener('input', debounce(fetchPrompts, 300));
+    function setSearchButtonState() {
+        promptSearchBtn.disabled = !promptWildcardSearch.value.trim();
+    }
+    promptWildcardSearch.addEventListener('input', setSearchButtonState);
+    promptWildcardSearch.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !promptSearchBtn.disabled) promptSearchBtn.click();
+    });
+    promptSearchBtn.addEventListener('click', async () => {
+        if (promptSearchBtn.disabled) return;
+        promptSearchBtn.disabled = true;
+        await fetchPrompts();
+    });
     closeModalBtn.addEventListener('click', closeViewModal);
     //closeModalBtnBottom.addEventListener('click', closeViewModal);
     copyBtn.addEventListener('click', copyToClipboard);

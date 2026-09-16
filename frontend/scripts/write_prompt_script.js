@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const promptCategorySelect = document.getElementById('promptCategory');
         const promptCriticalitySelect = document.getElementById('promptCriticality');
         const promptTagsInput = document.getElementById('promptTags');
+        const promptHint = document.getElementById('promptHint');
         const tagChips = document.getElementById('tagChips');
         const toast = document.getElementById('toast');
         let customTags = [];
@@ -21,6 +22,36 @@ document.addEventListener('DOMContentLoaded', function () {
         const modifiedDot = document.getElementById('modifiedDot');
         const fileLabel = document.getElementById('fileLabel');
         const minimapContent = document.getElementById('minimapContent');
+        const DRAFT_KEY = 'prompthub.prompt-draft.v1';
+
+        function saveDraft() {
+            try {
+                localStorage.setItem(DRAFT_KEY, JSON.stringify({
+                    body: textarea.value, title: promptNameInput.value,
+                    favorite: promptTagSelect.value, category: promptCategorySelect.value,
+                    criticality: promptCriticalitySelect.value, pendingTag: promptTagsInput.value,
+                    tags: customTags
+                }));
+            } catch (error) { console.warn('Unable to save local draft:', error); }
+        }
+
+        function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
+
+        function restoreDraft() {
+            try {
+                const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+                if (!draft) return false;
+                textarea.value = draft.body || '';
+                promptNameInput.value = draft.title || '';
+                promptTagSelect.value = draft.favorite || promptTagSelect.value;
+                promptCategorySelect.value = draft.category || promptCategorySelect.value;
+                promptCriticalitySelect.value = draft.criticality || promptCriticalitySelect.value;
+                promptTagsInput.value = draft.pendingTag || '';
+                customTags = Array.isArray(draft.tags) ? draft.tags : [];
+                renderTagChips();
+                return Boolean(textarea.value || promptNameInput.value || customTags.length);
+            } catch (error) { clearDraft(); return false; }
+        }
 
         function updateLineNumbers() {
             const lines = textarea.value.split('\n');
@@ -70,7 +101,7 @@ document.addEventListener('DOMContentLoaded', function () {
             positionStatus.textContent = `Ln ${ln}, Col ${col}`;
         }
 
-        textarea.addEventListener('input', () => { updateLineNumbers(); updateStats(); updateMinimap(); });
+        textarea.addEventListener('input', () => { updateLineNumbers(); updateStats(); updateMinimap(); saveDraft(); });
         textarea.addEventListener('keyup', updatePosition);
         textarea.addEventListener('click', updatePosition);
         textarea.addEventListener('mouseup', updatePosition);
@@ -82,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const end = this.selectionEnd;
                 this.value = this.value.substring(0, start) + '    ' + this.value.substring(end);
                 this.selectionStart = this.selectionEnd = start + 4;
-                updateLineNumbers(); updateStats(); updateMinimap();
+                updateLineNumbers(); updateStats(); updateMinimap(); saveDraft();
             }
             if ((e.metaKey || e.ctrlKey) && e.key === 's') {
                 e.preventDefault();
@@ -93,6 +124,9 @@ document.addEventListener('DOMContentLoaded', function () {
         function openModal() {
             const content = textarea.value.trim();
             if (!content) { shakeButton(); return; }
+            const firstLine = content.split(/\r?\n/)[0].trim();
+            const words = firstLine.split(/\s+/).slice(0, 4).join(' ');
+            promptHint.textContent = `${words}${firstLine.split(/\s+/).length > 4 ? '...' : ''}`;
             saveModal.classList.add('active');
             setTimeout(() => promptNameInput.focus(), 100);
         }
@@ -118,6 +152,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (customTags.some(t => t.toLowerCase() === name.toLowerCase())) return;
             customTags.push(name);
             renderTagChips();
+            saveDraft();
         }
 
         function closeModal() {
@@ -144,6 +179,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!btn) return;
             customTags.splice(Number(btn.dataset.index), 1);
             renderTagChips();
+            saveDraft();
         });
 
         promptTagsInput.addEventListener('keydown', e => {
@@ -154,14 +190,20 @@ document.addEventListener('DOMContentLoaded', function () {
             } else if (e.key === 'Backspace' && !promptTagsInput.value && customTags.length) {
                 customTags.pop();
                 renderTagChips();
+                saveDraft();
             }
         });
+        promptTagsInput.addEventListener('input', saveDraft);
         promptTagsInput.addEventListener('blur', () => {
             if (promptTagsInput.value.trim()) {
                 addTag(promptTagsInput.value);
                 promptTagsInput.value = '';
+                saveDraft();
             }
         });
+        [promptNameInput, promptTagSelect, promptCategorySelect, promptCriticalitySelect]
+            .forEach(input => input.addEventListener('input', saveDraft));
+        window.addEventListener('beforeunload', saveDraft);
 
         saveForm.addEventListener('submit', async function (e) {
             e.preventDefault();
@@ -198,6 +240,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
 
                 if (response.ok) {
+                    clearDraft();
                     closeModal();
                     textarea.value = '';
                     saveForm.reset();
@@ -228,5 +271,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
+        const draftRestored = restoreDraft();
         updateLineNumbers(); updateStats(); updateMinimap();
+        if (draftRestored) {
+            fileLabel.textContent = 'Draft restored';
+            fileLabel.style.color = 'var(--orange)';
+        }
     });

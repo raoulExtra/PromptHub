@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -6,8 +6,9 @@ from typing import List, Optional
 from datetime import date, datetime
 import sqlite3
 import os
+import re
 from backend.schema_models.schema_models import (
-    DerivedPrompt, Prompt, PromptCreate, PromptUpdate,
+    DerivedPrompt, Prompt, PromptCreate, PromptUpdate, TagCreate, TagUpdate,
 )
 
 
@@ -41,6 +42,16 @@ if "updated_at" not in existing_cols:
     cursor.execute("UPDATE PromptHub SET updated_at = date WHERE updated_at IS NULL")
     conn.commit()
 
+cursor.execute("CREATE TABLE IF NOT EXISTS tags_registered (name TEXT PRIMARY KEY NOT NULL, color TEXT, updated_at TEXT NOT NULL)")
+tag_columns = {row[1] for row in cursor.execute("PRAGMA table_info(tags_registered)").fetchall()}
+if "color" not in tag_columns:
+    cursor.execute("ALTER TABLE tags_registered ADD COLUMN color TEXT")
+if "updated_at" not in tag_columns:
+    cursor.execute("ALTER TABLE tags_registered ADD COLUMN updated_at TEXT")
+    cursor.execute("UPDATE tags_registered SET updated_at = ? WHERE updated_at IS NULL",
+                   (datetime.now().isoformat(timespec="seconds"),))
+    conn.commit()
+
 # Criticality is deliberately derived from tags so old databases and arbitrary
 # user tags remain compatible.  The view is also useful to SQL consumers.
 cursor.execute("""CREATE VIEW IF NOT EXISTS agent_prompts AS
@@ -59,6 +70,20 @@ conn.commit()
 
 
 CRITICALITY_LEVELS = {"normal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+COLOR_PRESETS = {
+    "light_green": "#90ee90", "dark_green": "#006400",
+    "light_blue": "#add8e6", "dark_blue": "#00008b",
+    "light_red": "#ffcccb", "dark_red": "#8b0000",
+    "light_yellow": "#ffffe0", "dark_yellow": "#b8860b",
+    "purple": "#800080", "orange": "#ffa500", "gray": "#808080",
+}
+
+
+def resolve_color(color: Optional[str]) -> Optional[str]:
+    if color is None:
+        return None
+    value = color.strip().lower()
+    return COLOR_PRESETS.get(value, color.strip()) or None
 
 
 def parse_tags(raw) -> List[str]:
@@ -126,21 +151,73 @@ app.add_middleware(
 
 @app.get("/api/tags", response_model=List[str])
 def list_tags():
-    """Return unique custom tags used across prompts."""
-    rows = cursor.execute("SELECT tags FROM PromptHub").fetchall()
-    seen = set()
-    out = []
-    for (raw,) in rows:
-        for tag in parse_tags(raw):
-            # Criticality has its own filter and should not pollute custom tags.
-            if tag.lower().startswith("criticality:"):
-                continue
-            key = tag.lower()
-            if key not in seen:
-                seen.add(key)
-                out.append(tag)
-    out.sort(key=str.lower)
-    return out
+    """Return registered tags for prompt entry and filtering."""
+    rows = cursor.execute("SELECT name FROM tags_registered ORDER BY lower(name), name").fetchall()
+    return [row[0] for row in rows]
+
+
+@app.get("/api/tags/details")
+def registered_tag_details():
+    rows = cursor.execute(
+        "SELECT name, color, updated_at FROM tags_registered ORDER BY lower(name), name"
+    ).fetchall()
+    return [{"name": row[0], "color": row[1], "updated_at": row[2]} for row in rows]
+
+
+@app.post("/api/tags", response_model=str)
+def create_registered_tag(tag: TagCreate):
+    name = " ".join(tag.name.strip().split())
+    if not name:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="tag name must not be empty")
+    try:
+        cursor.execute(
+            "INSERT INTO tags_registered (name, color, updated_at) VALUES (?, ?, ?)",
+            (name, resolve_color(tag.color), datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="tag already registered")
+    return name
+
+
+@app.put("/api/tags/{tag_name}", response_model=str)
+def update_registered_tag(tag_name: str, tag: TagUpdate):
+    new_name = " ".join(tag.new_name.strip().split())
+    if not new_name:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="tag name must not be empty")
+    try:
+        cursor.execute(
+            "UPDATE tags_registered SET name = ?, color = COALESCE(?, color), updated_at = ? WHERE lower(name) = lower(?)",
+            (new_name, resolve_color(tag.color), datetime.now().isoformat(timespec="seconds"), tag_name),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="tag not found")
+        conn.commit()
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="tag already registered")
+    return new_name
+
+
+@app.delete("/api/tags/{tag_name}")
+def delete_registered_tag(tag_name: str, detach: bool = Query(False)):
+    matching = cursor.execute(
+        "SELECT id, tags FROM PromptHub WHERE instr(lower(',' || tags || ','), lower(',' || ? || ',')) > 0",
+        (tag_name,),
+    ).fetchall()
+    cursor.execute("DELETE FROM tags_registered WHERE lower(name) = lower(?)", (tag_name,))
+    if cursor.rowcount == 0:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="tag not found")
+    if detach:
+        now = datetime.now().isoformat(timespec="seconds")
+        for prompt_id, prompt_tags in matching:
+            kept = [tag for tag in parse_tags(prompt_tags) if tag.lower() != tag_name.lower()]
+            cursor.execute("UPDATE PromptHub SET tags = ?, updated_at = ? WHERE id = ?",
+                           (tags_to_db(kept), now, prompt_id))
+    conn.commit()
+    return {"message": "Tag deleted", "detached": detach, "affected_prompts": len(matching)}
 
 
 @app.get("/api/prompts", response_model=List[Prompt])
@@ -170,12 +247,19 @@ def get_prompts(
         result = [p for p in result if p["criticality"] == criticality.lower()]
 
     if search:
-        search_lower = search.lower()
+        # Support SQL-style (%) and shell-style (*) wildcards while retaining
+        # ordinary substring search when no wildcard is supplied.
+        pattern = re.escape(search.lower()).replace("%", ".*").replace(r"\*", ".*").replace("_", ".").replace(r"\?", ".")
+        if not any(mark in search for mark in ("%", "*", "_", "?")):
+            pattern = ".*" + pattern + ".*"
+        matcher = re.compile(pattern)
+        has_wildcard = any(mark in search for mark in ("%", "*", "_", "?"))
+        match = matcher.fullmatch if has_wildcard else matcher.search
         result = [
             p for p in result
-            if search_lower in p["title"].lower()
-            or search_lower in p["body"].lower()
-            or any(search_lower in t.lower() for t in p["tags"])
+            if match(p["title"].lower())
+            or match(p["body"].lower())
+            or any(match(t.lower()) for t in p["tags"])
         ]
 
     return result
@@ -248,14 +332,25 @@ def delete_prompt(prompt_id: int):
 @app.put("/api/prompts/{prompt_id}")
 def update_prompt(prompt_id: int, prompt_update: PromptUpdate):
     """Update a prompt body by ID - prints values to console"""
-    cursor.execute("UPDATE PromptHub SET prompt_body = ?, updated_at = ? WHERE id = ?",
-                   (prompt_update.body, datetime.now().isoformat(timespec="seconds"), prompt_id))
+    fields = ["prompt_body = ?"]
+    values = [prompt_update.body]
+    if prompt_update.type is not None:
+        fields.append("category = ?")
+        values.append(prompt_update.type)
+    if prompt_update.tags is not None:
+        fields.append("tags = ?")
+        values.append(tags_to_db(prompt_update.tags))
+    fields.append("updated_at = ?")
+    values.extend([datetime.now().isoformat(timespec="seconds"), prompt_id])
+    cursor.execute(f"UPDATE PromptHub SET {', '.join(fields)} WHERE id = ?", values)
     conn.commit()
 
     return {
         "message": "Update request received",
         "id": prompt_id,
-        "body": prompt_update.body
+        "body": prompt_update.body,
+        "type": prompt_update.type,
+        "tags": prompt_update.tags,
     }
 
 
@@ -279,6 +374,11 @@ async def serve_write_prompt():
 async def serve_show_prompts():
     """Serve the show prompts page"""
     return FileResponse(get_file_path("frontend/show_prompts.html"))
+
+@app.get("/manage_tags.html")
+async def serve_manage_tags():
+    """Serve the tag management page"""
+    return FileResponse(get_file_path("frontend/manage_tags.html"))
 
 @app.get("/index.html")
 async def serve_index_alt():

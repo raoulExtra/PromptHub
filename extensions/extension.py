@@ -14,9 +14,24 @@ from pathlib import Path
 from typing import Any
 
 
+EXTENSION_VERSION = "1.0"
 DB_PATH = Path(__file__).resolve().parents[1] / "backend" / "database" / "prompthub.db"
 IMPORT_EXPORT_PATH = Path(__file__).resolve().parent / "import-export" / "import-export.py"
 CRITICALITY_LEVELS = {"normal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+COLOR_PRESETS = {
+    "light_green": "#90ee90", "dark_green": "#006400",
+    "light_blue": "#add8e6", "dark_blue": "#00008b",
+    "light_red": "#ffcccb", "dark_red": "#8b0000",
+    "light_yellow": "#ffffe0", "dark_yellow": "#b8860b",
+    "purple": "#800080", "orange": "#ffa500", "gray": "#808080",
+}
+
+
+def resolve_color(color: str | None) -> str | None:
+    if color is None:
+        return None
+    value = color.strip().lower()
+    return COLOR_PRESETS.get(value, color.strip()) or None
 
 
 def _import_export_module():
@@ -79,9 +94,11 @@ def init_db(prompts: list[dict[str, Any]] | None = None) -> int:
             connection.execute("ALTER TABLE PromptHub ADD COLUMN updated_at TEXT")
             connection.execute("UPDATE PromptHub SET updated_at = date WHERE updated_at IS NULL")
         connection.execute(
-            "CREATE TABLE IF NOT EXISTS tags_registered (name TEXT PRIMARY KEY NOT NULL, updated_at TEXT NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS tags_registered (name TEXT PRIMARY KEY NOT NULL, color TEXT, updated_at TEXT NOT NULL)"
         )
         tag_columns = {row[1] for row in connection.execute("PRAGMA table_info(tags_registered)")}
+        if "color" not in tag_columns:
+            connection.execute("ALTER TABLE tags_registered ADD COLUMN color TEXT")
         if "updated_at" not in tag_columns:
             connection.execute("ALTER TABLE tags_registered ADD COLUMN updated_at TEXT")
             connection.execute("UPDATE tags_registered SET updated_at = ? WHERE updated_at IS NULL",
@@ -132,8 +149,8 @@ def init_db(prompts: list[dict[str, Any]] | None = None) -> int:
         return inserted
 
 
-def create_tag(name: str) -> str:
-    """Register a tag, rejecting case-insensitive duplicates."""
+def create_tag(name: str, color: str | None = None) -> str:
+    """Register a tag with an optional display color."""
     name = " ".join(name.strip().split())
     if not name:
         raise ValueError("tag name must not be empty")
@@ -146,10 +163,18 @@ def create_tag(name: str) -> str:
         if exists:
             raise ValueError(f"tag already registered: {name}")
         connection.execute(
-            "INSERT INTO tags_registered (name, updated_at) VALUES (?, ?)",
-            (name, datetime.now().isoformat(timespec="seconds")),
+            "INSERT INTO tags_registered (name, color, updated_at) VALUES (?, ?, ?)",
+            (name, resolve_color(color), datetime.now().isoformat(timespec="seconds")),
         )
     return name
+
+
+def read_tag_details() -> list[dict[str, Any]]:
+    """Return registered tags with colors and update timestamps."""
+    with _connect() as connection:
+        return [dict(row) for row in connection.execute(
+            "SELECT name, color, updated_at FROM tags_registered ORDER BY lower(name), name"
+        )]
 
 
 def read_tags() -> list[str]:
@@ -160,9 +185,9 @@ def read_tags() -> list[str]:
         )]
 
 
-def update_tag(name: str, new_name: str) -> bool:
-    """Rename a registered tag, returning whether it existed."""
-    new_name = " ".join(new_name.strip().split())
+def update_tag(name: str, new_name: str | None = None, color: str | None = None) -> bool:
+    """Rename and/or recolor a registered tag."""
+    new_name = " ".join((new_name or name).strip().split())
     if not new_name:
         raise ValueError("new tag name must not be empty")
     with _write_connection() as connection:
@@ -173,8 +198,8 @@ def update_tag(name: str, new_name: str) -> bool:
         if duplicate:
             raise ValueError(f"tag already registered: {new_name}")
         cursor = connection.execute(
-            "UPDATE tags_registered SET name = ?, updated_at = ? WHERE lower(name) = lower(?)",
-            (new_name, datetime.now().isoformat(timespec="seconds"), name),
+            "UPDATE tags_registered SET name = ?, color = COALESCE(?, color), updated_at = ? WHERE lower(name) = lower(?)",
+            (new_name, resolve_color(color), datetime.now().isoformat(timespec="seconds"), name),
         )
         return cursor.rowcount > 0
 
@@ -396,6 +421,7 @@ if __name__ == "__main__":
                 "  extension.py --tag-update --tag 'team:security' --new-tag 'team:safety'\n"
                 "  extension.py --tag-delete --tag 'team:safety'"),
     )
+    parser.add_argument("--version", action="version", version=f"PromptHub extension v{EXTENSION_VERSION}")
     operations = parser.add_mutually_exclusive_group()
     operations.add_argument(
         "--init_db", action="store_true",
@@ -421,6 +447,7 @@ if __name__ == "__main__":
     parser.add_argument("--validate-tags", action="store_true", help="reject tags absent from tags_registered")
     parser.add_argument("--tag", help="registered tag name for tag operations")
     parser.add_argument("--new-tag", help="replacement name for --tag-update")
+    parser.add_argument("--color", help="optional hex color or preset: light_green, dark_blue, purple, orange")
     parser.add_argument("--contain", metavar="NAME_PART", default="", help="filename filter used with --import")
     parser.add_argument("--demo", action="store_true", help="with --export, export only prompts tagged data:demo")
     parser.add_argument("--min_crit", choices=sorted(CRITICALITY_LEVELS), default="normal", help="minimum criticality for --gen_sys_prompt")
@@ -458,7 +485,7 @@ if __name__ == "__main__":
     if args.tag_create:
         if not args.tag:
             parser.error("--tag-create requires --tag")
-        print(create_tag(args.tag))
+        print(create_tag(args.tag, color=args.color))
         raise SystemExit(0)
     if args.tag_read:
         print(read_tags() if not args.tag else [tag for tag in read_tags() if tag.lower() == args.tag.lower()])
@@ -466,7 +493,7 @@ if __name__ == "__main__":
     if args.tag_update:
         if not args.tag or not args.new_tag:
             parser.error("--tag-update requires --tag and --new-tag")
-        print("Updated" if update_tag(args.tag, args.new_tag) else "Tag not found")
+        print("Updated" if update_tag(args.tag, args.new_tag, color=args.color) else "Tag not found")
         raise SystemExit(0)
     if args.tag_delete:
         if not args.tag:

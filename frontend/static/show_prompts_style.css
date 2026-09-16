@@ -377,6 +377,24 @@
         .badge-criticality-medium { background: rgba(250,204,21,0.12); color: #facc15; border-color: rgba(250,204,21,0.3); }
         .badge-criticality-low { background: rgba(96,165,250,0.1); color: var(--blue); border-color: rgba(96,165,250,0.25); }
         .badge-criticality-normal { background: rgba(255,255,255,0.05); color: var(--text-3); border-color: var(--border); }
+        .tag-register { display: flex; gap: 5px; margin-top: 7px; }
+        .tag-register input { min-width: 0; flex: 1; }
+        .tag-register button { border: 1px solid var(--border-2); background: var(--surface-3); color: var(--text-2); border-radius: 5px; padding: 0 8px; cursor: pointer; }
+        .prompt-search { display:flex; margin-bottom:20px; border:1px solid var(--border); background:var(--surface-2); }
+        .prompt-search input { flex:1; min-width:0; border:0; background:transparent; color:var(--text); padding:10px 12px; font:12px 'DM Mono',monospace; outline:none; }
+        .prompt-search button { width:38px; border:0; border-left:1px solid var(--border); background:var(--primary); color:var(--on-primary); cursor:pointer; }
+        .prompt-search button:hover { filter:brightness(1.1); }
+        .prompt-search button:disabled { opacity:.35; cursor:not-allowed; filter:none; }
+        .tag-assign-panel { border-top:1px solid var(--border); margin-top:20px; padding-top:20px; }
+        .tag-assign-panel select { width:100%; margin-top:8px; }
+        .tag-register button:hover { color: var(--primary); border-color: var(--primary); }
+        .tag-registry-list { margin-top: 6px; max-height: 120px; overflow-y: auto; }
+        .registered-tag-row { display: flex; justify-content: space-between; gap: 8px; color: var(--text-2); font-size: 10px; padding: 3px 0; }
+        .registered-tag-row small { color: var(--text-3); white-space: nowrap; }
+        .card-date { color: var(--text-3); font-size: 10px; margin-top: 4px; }
+        .edit-type-label { display: block; margin: 0 18px 6px; color: var(--text-3); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+        .edit-type-select { display: block; width: calc(100% - 36px); margin: 0 18px 18px; }
+        .edit-tags-input { display: block; width: calc(100% - 36px); margin: 0 18px 18px; }
 
         .empty-state {
             display: flex;

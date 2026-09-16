@@ -1,1 +1,0 @@
-After each user instruction, restate it briefly in my own words.

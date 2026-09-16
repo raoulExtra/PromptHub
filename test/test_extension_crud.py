@@ -44,10 +44,14 @@ def test_registered_tag_crud(tmp_path, monkeypatch):
     monkeypatch.setattr(extension, "DB_PATH", database)
     extension.init_db([])
 
-    assert extension.create_tag("team:security") == "team:security"
+    assert extension.create_tag("team:security", color="light_green") == "team:security"
     assert "team:security" in extension.read_tags()
-    assert extension.update_tag("team:security", "team:safety") is True
+    details = {item["name"]: item for item in extension.read_tag_details()}
+    assert details["team:security"]["color"] == "#90ee90"
+    assert extension.update_tag("team:security", "team:safety", color="#00ccff") is True
     assert "team:safety" in extension.read_tags()
+    details = {item["name"]: item for item in extension.read_tag_details()}
+    assert details["team:safety"]["color"] == "#00ccff"
     assert extension.delete_tag("team:safety") is True
     assert "team:safety" not in extension.read_tags()
 

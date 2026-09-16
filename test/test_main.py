@@ -26,6 +26,8 @@ def client(tmp_path, monkeypatch):
             updated_at TEXT NOT NULL
         )"""
     )
+    cursor.execute("CREATE TABLE tags_registered (name TEXT PRIMARY KEY NOT NULL, color TEXT, updated_at TEXT NOT NULL)")
+    connection.commit()
     cursor.execute(
         """CREATE VIEW agent_prompts AS
         SELECT id, prompt_name, prompt_body, date, category, tags,
@@ -57,12 +59,35 @@ def prompt(title="Agent", body="Do the work", prompt_type="System prompt", tags=
     }
 
 
+def test_registered_tag_api(client):
+    response = client.post("/api/tags", json={"name": "team:security"})
+    assert response.status_code == 200
+    assert response.json() == "team:security"
+    assert "team:security" in client.get("/api/tags").json()
+
+    response = client.put("/api/tags/team:security", json={"new_name": "team:safety"})
+    assert response.status_code == 200
+    assert response.json() == "team:safety"
+    assert client.delete("/api/tags/team:safety").status_code == 200
+
+
+def test_delete_tag_can_detach_prompt_assignments(client):
+    client.post("/api/tags", json={"name": "team:ops"})
+    created = client.post("/api/prompts", json=prompt(tags=["team:ops"])).json()
+    response = client.delete("/api/tags/team:ops?detach=true")
+    assert response.status_code == 200
+    assert response.json()["detached"] is True
+    assert "team:ops" not in client.get("/api/prompts").json()[0]["tags"]
+
+
 def test_create_and_list_prompts(client):
     response = client.post("/api/prompts", json=prompt(tags=["coding", "criticality:high"]))
     assert response.status_code == 200
     created = response.json()
     assert created["title"] == "Agent"
     assert created["criticality"] == "high"
+    assert len(client.get("/api/prompts?search=Age*").json()) == 1
+    assert [item["title"] for item in client.get("/api/prompts?search=A%25").json()] == ["Agent"]
 
     response = client.get("/api/prompts")
     assert response.status_code == 200
@@ -89,6 +114,7 @@ def test_prompt_filters_and_search(client):
 
 
 def test_tags_endpoint_excludes_criticality_tags(client):
+    client.post("/api/tags", json={"name": "coding"})
     client.post("/api/prompts", json=prompt(tags=["coding", "criticality:critical"]))
     response = client.get("/api/tags")
     assert response.status_code == 200
@@ -132,10 +158,11 @@ def test_update_and_delete_prompt(client):
     created = client.post("/api/prompts", json=prompt()).json()
     prompt_id = created["id"]
 
-    response = client.put(f"/api/prompts/{prompt_id}", json={"body": "Updated"})
+    response = client.put(f"/api/prompts/{prompt_id}", json={"body": "Updated", "type": "User prompt"})
     assert response.status_code == 200
-    assert response.json() == {"message": "Update request received", "id": prompt_id, "body": "Updated"}
+    assert response.json() == {"message": "Update request received", "id": prompt_id, "body": "Updated", "type": "User prompt", "tags": None}
     assert client.get("/api/prompts").json()[0]["body"] == "Updated"
+    assert client.get("/api/prompts").json()[0]["type"] == "User prompt"
 
     response = client.delete(f"/api/prompts/{prompt_id}")
     assert response.status_code == 200

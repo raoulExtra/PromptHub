@@ -30,6 +30,11 @@
         </div>
 
         <div class="sidebar-body">
+            <div class="prompt-search">
+                <input type="text" id="promptWildcardSearch" placeholder="Search prompts (% or * wildcard)">
+                <button type="button" id="promptSearchBtn" aria-label="Search prompts" disabled><i class="fa-solid fa-search"></i></button>
+            </div>
+
             <div class="filter-group">
                 <span class="filter-label">Favorites</span>
                 <select id="filterTag">
@@ -40,9 +45,9 @@
             </div>
 
             <div class="filter-group">
-                <span class="filter-label">Filter by Tag</span>
+                <span class="filter-label">FILTER BY TAG</span>
                 <select id="filterCustomTag">
-                    <option value="all">All Tags</option>
+                    <option value="all">Filter by tag</option>
                 </select>
             </div>
 
@@ -73,6 +78,10 @@
                     <span class="stats-val" id="totalCount">0</span>
                 </div>
                 <div class="stats-bar"><div class="stats-bar-fill"></div></div>
+            </div>
+            <div class="tag-assign-panel">
+                <span class="filter-label">ASSIGN TO PROMPT</span>
+                <select id="assignTagSelect"><option value="">Select tag</option></select>
             </div>
         </div>
 
@@ -138,6 +147,13 @@
         </div>
         <div class="modal-body">
             <textarea id="editTextarea" class="edit-textarea" placeholder="Enter your prompt here..."></textarea>
+            <label class="edit-type-label" for="editTypeSelect">Prompt type</label>
+            <select id="editTypeSelect" class="edit-type-select">
+                <option value="System prompt">System Prompt</option>
+                <option value="User prompt">User Prompt</option>
+            </select>
+            <label class="edit-type-label" for="editTagsInput">Edit tags</label>
+            <input id="editTagsInput" class="edit-tags-input" type="text" placeholder="coding, criticality:high">
         </div>
         <div class="modal-footer">
             <button class="btn-md btn-ghost" id="cancelEditBtn">Cancel</button>
