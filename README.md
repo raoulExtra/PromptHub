@@ -18,7 +18,7 @@ No cloud dependencies. No subscriptions. Just your prompts, organized.
 
 ![PromptHub Screenshot](https://github.com/cyberytti/PromptHub/blob/main/assets/Screenshot%20from%202026-03-23%2015-00-07.png)
 
-> *The PromptHub interface: clean, focused, and ready to capture your best AI prompts.*
+> *The PromptHub v3.1 interface: clean, focused, and ready to capture your best AI prompts.*
 
 ---
 
@@ -40,7 +40,8 @@ Every AI power user faces the same friction: great prompts get lost in notes app
 ## ✨ Features
 
 * **⚡ Instant Capture:** Write and save prompts with zero friction.
-* **🏷️ Smart Tagging:** Mark favorites, categorize as System or User, and add your own custom tags (filterable in the library).
+* **🏷️ Smart Tagging:** Mark favorites, categorize as System, Agent, User, or Other, and add your own custom tags (filterable in the library).
+* **🧩 Tag management:** Use **Edit Tags** to register, color, filter, and safely remove tags. In **Manage Prompts**, select one or more prompts and choose a tag under **ASSIGN TAG TO PROMPT**; governance tags can automatically adjust the prompt type after confirmation.
 * **🎚️ Criticality-aware agents:** Assign `normal`, `low`, `medium`, `high`, or `critical` priority to prompts and derive an ordered system/agent prompt feed.
 * **🔍 Fast Search:** Find prompts by title or content instantly.
 * **📋 One-Click Copy:** Copy prompt body to clipboard immediately.
