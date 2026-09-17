@@ -44,7 +44,14 @@ def test_init_db_then_export(tmp_path, monkeypatch):
     assert registered_tags == [
         "criticality:critical", "criticality:high", "criticality:medium",
         "criticality:low", "data:demo", "governance:system_instruction",
+        "governance:agent_instruction", "governance:user_instruction",
+        "task:code-review", "domain:security",
     ]
+    colors = {row["name"]: row["color"] for row in extension.read_table("tags_registered")}
+    assert colors["data:demo"] == "#add8e6"
+    assert colors["governance:system_instruction"] == "#ffa500"
+    assert colors["governance:agent_instruction"] == "#ffa500"
+    assert colors["governance:user_instruction"] == "#ffa500"
     export_dir = tmp_path / "protected" / "export"
     export_dir.mkdir(parents=True, exist_ok=True)
     (export_dir / "old-prompt.md").write_text("stale", encoding="utf-8")
@@ -71,6 +78,10 @@ def test_init_db_then_export(tmp_path, monkeypatch):
     assert "tags: agent, criticality:critical" in critical_prompt
     assert "Follow the safety policy." in critical_prompt
     assert extension.generate_system_prompt("high") == "Follow the safety policy."
+    output = tmp_path / "SYSTEM.md"
+    monkeypatch.setattr(extension, "SYSTEM_PATH", output)
+    assert extension.write_system_prompt("high") == output
+    assert output.read_text(encoding="utf-8") == "Follow the safety policy.\n"
 
     for path in files:
         path.unlink()

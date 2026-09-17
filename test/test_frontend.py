@@ -16,14 +16,19 @@ def test_manage_prompts_has_wildcard_search_control():
     assert 'id="promptSearchBtn" aria-label="Search prompts" disabled' in html
     assert 'id="registerTagBtn"' not in html
     assert 'FILTER BY TAG' in html
-    assert 'ASSIGN TO PROMPT' in html
+    assert 'ASSIGN TAG TO PROMPT' in html
+    assert 'Assign tag to prompt' not in html
     assert 'id="assignTagSelect"' in html
+    assert 'class="prompt-select"' in js
     assert 'id="assignTagBtn"' not in html
     assert 'id="tagRegistryList"' not in html
     assert "promptWildcardSearch.value" in js
     assert "promptSearchBtn.addEventListener" in js
     assert "assignTagSelect.addEventListener('change'" in js
-    assert "currentItemTags.push(tag)" in js
+    assert "No prompt(s) selected for assign" in js
+    assert "prompt-select:checked" in js
+    assert "selectedIds.length" in js
+    assert "tags.push(tag)" in js
     assert "promptSearchBtn.disabled = true" in js
 
 
@@ -37,9 +42,25 @@ def test_tag_management_panel_supports_filter_register_and_remove():
     assert "/api/tags/details" in tags_html
 
 
+def test_other_prompt_type_is_available_everywhere():
+    write_html = (ROOT / "frontend" / "write_prompt.html").read_text(encoding="utf-8")
+    show_html = (ROOT / "frontend" / "show_prompts.html").read_text(encoding="utf-8")
+    write_js = (ROOT / "frontend" / "scripts" / "write_prompt_script.js").read_text(encoding="utf-8")
+    show_js = (ROOT / "frontend" / "scripts" / "show_prompt_script.js").read_text(encoding="utf-8")
+    assert 'value="other">Other' in write_html
+    assert write_js.count("'Other'") >= 1
+    assert show_html.count('value="Other"') >= 2
+    assert 'value="Agent prompt"' in show_html
+    assert "governanceTypeForTags" in show_js
+    assert "requires the prompt type" in show_js
+    assert "governance:user_instruction" in show_js
+
+
 def test_versions_are_displayed():
     extension = (ROOT / "extensions" / "extension.py").read_text(encoding="utf-8")
-    assert '<span class="chip">v3.1</span>' in (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    assert '<span class="chip">v3.1</span>' in index_html
+    assert 'class="stat-val">3</div><div class="stat-lbl">Prompt types' in index_html
     assert 'EXTENSION_VERSION = "1.0"' in extension
     assert "PromptHub extension v{EXTENSION_VERSION}" in extension
 

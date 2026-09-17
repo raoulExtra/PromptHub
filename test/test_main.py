@@ -86,6 +86,8 @@ def test_create_and_list_prompts(client):
     created = response.json()
     assert created["title"] == "Agent"
     assert created["criticality"] == "high"
+    other = client.post("/api/prompts", json=prompt(title="Misc", prompt_type="Other")).json()
+    assert other["type"] == "Other"
     assert len(client.get("/api/prompts?search=Age*").json()) == 1
     assert [item["title"] for item in client.get("/api/prompts?search=A%25").json()] == ["Agent"]
 

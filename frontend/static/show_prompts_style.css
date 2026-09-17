@@ -311,14 +311,34 @@
             min-width: 0;
         }
 
+        .prompt-select-wrap {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .prompt-select {
+            display: block;
+            visibility: visible;
+            opacity: 1;
+            appearance: auto;
+            width: 15px;
+            height: 15px;
+            margin: 0;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
         .card-icon {
             width: 36px;
-            height: 36px;
+            height: 52px;
             border-radius: 6px;
             background: var(--surface-3);
             border: 1px solid var(--border);
-            display: grid;
-            place-items: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-evenly;
             flex-shrink: 0;
             font-size: 14px;
         }

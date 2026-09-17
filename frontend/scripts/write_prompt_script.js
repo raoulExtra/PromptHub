@@ -220,7 +220,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 title: promptNameInput.value.trim(),
                 body: textarea.value.trim(),
                 favorite: promptTagSelect.value === 'favorite' ? 'Favorite' : 'Not favorite',
-                type: promptCategorySelect.value === 'system' ? 'System prompt' : 'User prompt',
+                type: promptCategorySelect.value === 'system' ? 'System prompt' :
+                    promptCategorySelect.value === 'user' ? 'User prompt' : 'Other',
                 tags
             };
 

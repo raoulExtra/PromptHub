@@ -15,7 +15,9 @@ from typing import Any
 
 
 EXTENSION_VERSION = "1.0"
-DB_PATH = Path(__file__).resolve().parents[1] / "backend" / "database" / "prompthub.db"
+WORKSPACE_PATH = Path(__file__).resolve().parents[1]
+SYSTEM_PATH = WORKSPACE_PATH / "SYSTEM.md"
+DB_PATH = WORKSPACE_PATH / "backend" / "database" / "prompthub.db"
 IMPORT_EXPORT_PATH = Path(__file__).resolve().parent / "import-export" / "import-export.py"
 CRITICALITY_LEVELS = {"normal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 COLOR_PRESETS = {
@@ -103,12 +105,21 @@ def init_db(prompts: list[dict[str, Any]] | None = None) -> int:
             connection.execute("ALTER TABLE tags_registered ADD COLUMN updated_at TEXT")
             connection.execute("UPDATE tags_registered SET updated_at = ? WHERE updated_at IS NULL",
                                (datetime.now().isoformat(timespec="seconds"),))
+        default_tags = [
+            ("criticality:critical", None), ("criticality:high", None),
+            ("criticality:medium", None), ("criticality:low", None),
+            ("data:demo", resolve_color("light_blue")),
+            ("governance:system_instruction", resolve_color("orange")),
+            ("governance:agent_instruction", resolve_color("orange")),
+            ("governance:user_instruction", resolve_color("orange")),
+            ("task:code-review", None), ("domain:security", None),
+        ]
         connection.executemany(
-            "INSERT OR IGNORE INTO tags_registered (name, updated_at) VALUES (?, ?)",
-            [(tag, datetime.now().isoformat(timespec="seconds")) for tag in (
-                "criticality:critical", "criticality:high", "criticality:medium",
-                "criticality:low", "data:demo", "governance:system_instruction",
-            )],
+            """INSERT INTO tags_registered (name, color, updated_at) VALUES (?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET color = COALESCE(excluded.color, tags_registered.color),
+               updated_at = excluded.updated_at""",
+            [(tag, color, datetime.now().isoformat(timespec="seconds")
+              ) for tag, color in default_tags],
         )
         demo_seed = prompts is None
         seed_prompts = prompts if prompts is not None else [
@@ -117,6 +128,7 @@ def init_db(prompts: list[dict[str, Any]] | None = None) -> int:
             {"title": "Core requirement documentation", "body": "In docs create ###-CREQ-<title>.md files describing all core requirements of our code and db with acc criterias.", "tags": ["criticality:high", "data:demo", "governance:system_instruction"]},
             {"title": "Context handling", "body": "Use the available context when relevant.", "tags": ["criticality:medium", "data:demo", "governance:system_instruction"]},
             {"title": "Optional style", "body": "Prefer helpful examples when useful.", "tags": ["criticality:low", "data:demo", "governance:system_instruction"]},
+            {"title": "SQLite user database CRUD", "body": "create me a sqlite db user.db with table user and know_how. create a related py which allows me CRUD operations (create/read/update/delete)", "type": "User prompt", "tags": ["criticality:normal", "data:demo", "governance:user_instruction"]},
         ]
         inserted = 0
         for item in seed_prompts:
@@ -138,7 +150,8 @@ def init_db(prompts: list[dict[str, Any]] | None = None) -> int:
                 ).fetchone()
                 tags = _parse_tags(existing[0]) if existing else []
                 tag_keys = {tag.lower() for tag in tags}
-                required_tags = ["data:demo", "governance:system_instruction"]
+                governance_tag = "governance:user_instruction" if item.get("type", "System prompt").lower() == "user prompt" else "governance:system_instruction"
+                required_tags = ["data:demo", governance_tag]
                 missing_tags = [tag for tag in required_tags if tag.lower() not in tag_keys]
                 if missing_tags:
                     tags.extend(missing_tags)
@@ -378,16 +391,34 @@ def read_prompts(
     return prompts
 
 
-def generate_system_prompt(min_crit: str = "normal") -> str:
-    """Combine agent prompt contents at or above ``min_crit`` priority."""
+def generate_prompt(kind: str = "sys", min_crit: str = "normal") -> str:
+    """Combine system or user prompt contents at or above ``min_crit``."""
     minimum = min_crit.lower()
     if minimum not in CRITICALITY_LEVELS:
         raise ValueError("min_crit must be normal, low, medium, high, or critical")
-    prompts = [
-        item for item in read_agent_prompts()
-        if CRITICALITY_LEVELS[item["criticality"]] >= CRITICALITY_LEVELS[minimum]
-    ]
-    return "\n\n".join(item["body"] for item in prompts)
+    if kind not in {"sys", "user"}:
+        raise ValueError("kind must be sys or user")
+    prompt_types = {"sys": {"system prompt", "agent prompt"}, "user": {"user prompt"}}[kind]
+    prompts = [item for item in read_prompts() if item["type"].lower() in prompt_types
+               and CRITICALITY_LEVELS[item["criticality"]] >= CRITICALITY_LEVELS[minimum]]
+    prompts.sort(key=lambda item: (CRITICALITY_LEVELS[item["criticality"]], item["id"]), reverse=True)
+    return "\n".join(item["body"] for item in prompts)
+
+
+def generate_system_prompt(min_crit: str = "normal") -> str:
+    """Backward-compatible system prompt generator."""
+    return generate_prompt("sys", min_crit)
+
+
+def write_generated_prompt(kind: str = "sys", min_crit: str = "normal") -> Path:
+    """Generate and write a prompt variant to SYSTEM.md or USER.md."""
+    path = SYSTEM_PATH if kind == "sys" else WORKSPACE_PATH / "USER.md"
+    path.write_text(generate_prompt(kind, min_crit) + "\n", encoding="utf-8")
+    return path
+
+
+def write_system_prompt(min_crit: str = "normal") -> Path:
+    return write_generated_prompt("sys", min_crit)
 
 
 def read_agent_prompts(criticality: str | None = None) -> list[dict[str, Any]]:
@@ -409,7 +440,7 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=("Without an operation, print system/agent prompts ordered by criticality. "
                 "Import and export use protected/import/ and protected/export/; "
-                "--gen_sys_prompt combines prompts at or above --min_crit.\n\n"
+                "--gen_prompt sys|user combines prompts at or above --min_crit.\n\n"
                 "Examples:\n"
                 "  extension.py --create --title Safety --body 'Follow rules' "
                 "--tags 'criticality:critical,data:demo' --validate-tags\n"
@@ -419,7 +450,10 @@ if __name__ == "__main__":
                 "  extension.py --tag-create --tag 'team:security'\n"
                 "  extension.py --tag-read\n"
                 "  extension.py --tag-update --tag 'team:security' --new-tag 'team:safety'\n"
-                "  extension.py --tag-delete --tag 'team:safety'"),
+                "  extension.py --tag-delete --tag 'team:safety'\n"
+                "  extension.py --gen_prompt sys --min_crit high\n"
+                "  extension.py --gen_prompt user --min_crit normal\n"
+                "  writes the result to workspace SYSTEM.md or USER.md"),
     )
     parser.add_argument("--version", action="version", version=f"PromptHub extension v{EXTENSION_VERSION}")
     operations = parser.add_mutually_exclusive_group()
@@ -429,7 +463,7 @@ if __name__ == "__main__":
     )
     operations.add_argument("--import", dest="do_import", action="store_true", help="import Markdown prompts")
     operations.add_argument("--export", dest="do_export", action="store_true", help="export prompts to Markdown")
-    operations.add_argument("--gen_sys_prompt", action="store_true", help="combine system/agent prompt contents by priority")
+    operations.add_argument("--gen_prompt", choices=("sys", "user"), help="generate sys or user prompts by priority")
     operations.add_argument("--create", action="store_true", help="create a prompt")
     operations.add_argument("--read", action="store_true", help="read one prompt by --id")
     operations.add_argument("--update", action="store_true", help="update a prompt by --id")
@@ -450,14 +484,14 @@ if __name__ == "__main__":
     parser.add_argument("--color", help="optional hex color or preset: light_green, dark_blue, purple, orange")
     parser.add_argument("--contain", metavar="NAME_PART", default="", help="filename filter used with --import")
     parser.add_argument("--demo", action="store_true", help="with --export, export only prompts tagged data:demo")
-    parser.add_argument("--min_crit", choices=sorted(CRITICALITY_LEVELS), default="normal", help="minimum criticality for --gen_sys_prompt")
+    parser.add_argument("--min_crit", choices=sorted(CRITICALITY_LEVELS), default="normal", help="minimum criticality for --gen_prompt")
     args = parser.parse_args()
     if args.init_db:
         init_db()
         print(f"Initialized {DB_PATH}")
         raise SystemExit(0)
-    if args.gen_sys_prompt:
-        print(generate_system_prompt(args.min_crit))
+    if args.gen_prompt:
+        print(f"Wrote {write_generated_prompt(args.gen_prompt, args.min_crit)}")
         raise SystemExit(0)
     if args.create:
         if not args.title or args.body is None:

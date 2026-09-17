@@ -76,7 +76,7 @@ const API_URL = "/api";
         }
     }
 
-    async function updatePromptAPI(id, body, type, tags) {
+    async function updatePromptAPI(id, body, type, tags, refresh = true) {
         try {
             const response = await fetch(`${API_URL}/prompts/${id}`, {
                 method: 'PUT',
@@ -87,7 +87,7 @@ const API_URL = "/api";
                 showToast('Prompt updated');
                 closeEditModal();
                 closeViewModal();
-                fetchPrompts();
+                if (refresh) fetchPrompts();
             } else {
                 showErrorToast('Failed to update prompt');
             }
@@ -145,6 +145,9 @@ const API_URL = "/api";
                     <div class="card-left">
                         <div class="card-icon">
                             <i class="fa-solid ${iconClass}" style="${iconColor};font-size:14px;"></i>
+                            <label class="prompt-select-wrap" title="Select prompt" onclick="event.stopPropagation()">
+                                <input type="checkbox" class="prompt-select" data-prompt-id="${item.id}" aria-label="Select ${escapeHtml(item.title)}">
+                            </label>
                         </div>
                         <div class="card-text">
                             <div class="card-title">${item.title}</div>
@@ -228,11 +231,22 @@ const API_URL = "/api";
         navigator.clipboard.writeText(modalBody.innerText).then(() => showToast('Copied to clipboard!'));
     }
 
+    function governanceTypeForTags(tags) {
+        if (tags.some(tag => tag.toLowerCase() === 'governance:system_instruction')) return 'System prompt';
+        if (tags.some(tag => tag.toLowerCase() === 'governance:agent_instruction')) return 'Agent prompt';
+        if (tags.some(tag => tag.toLowerCase() === 'governance:user_instruction')) return 'User prompt';
+        return null;
+    }
+
     function handleUpdate() {
         const updatedBody = editTextarea.value.trim();
         if (!updatedBody) { showErrorToast('Prompt body cannot be empty'); return; }
         const tags = editTagsInput.value.split(',').map(tag => tag.trim().replace(/^#+/, '')).filter(Boolean);
-        if (currentItemId !== null) updatePromptAPI(currentItemId, updatedBody, editTypeSelect.value, tags);
+        const governanceType = governanceTypeForTags(tags);
+        let type = editTypeSelect.value;
+        if (governanceType && type !== governanceType && !confirm(`This governance tag requires the prompt type “${governanceType}”. Adjust the type automatically?`)) return;
+        if (governanceType) type = governanceType;
+        if (currentItemId !== null) updatePromptAPI(currentItemId, updatedBody, type, tags);
     }
 
     let toastTimer;
@@ -273,7 +287,7 @@ const API_URL = "/api";
             filterCustomTag.innerHTML = '<option value="all">All Tags</option>' +
                 details.map(item => `<option value="${escapeHtml(item.name)}"${tagStyle(item.name)}>${escapeHtml(item.name)}</option>`).join('');
             filterCustomTag.value = tags.some(t => t === current) ? current : 'all';
-            assignTagSelect.innerHTML = '<option value="">Assign tag to prompt</option>' +
+            assignTagSelect.innerHTML = '<option value="">Select a tag</option>' +
                 details.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join('');
         } catch (error) {
             console.error('Error loading tags:', error);
@@ -293,11 +307,38 @@ const API_URL = "/api";
     filterCustomTag.addEventListener('change', fetchPrompts);
     assignTagSelect.addEventListener('change', async () => {
         const tag = assignTagSelect.value;
-        if (!currentItemId) return showErrorToast('Open a prompt before assigning a tag');
+        const selectedIds = [...document.querySelectorAll('.prompt-select:checked')]
+            .map(input => Number(input.dataset.promptId));
+        if (!selectedIds.length) return showErrorToast('No prompt(s) selected for assign');
         if (!tag) return showErrorToast('Select a tag to assign');
-        if (!currentItemTags.some(item => item.toLowerCase() === tag.toLowerCase())) currentItemTags.push(tag);
-        await updatePromptAPI(currentItemId, currentItemBody, currentItemType, currentItemTags);
+
+        const governanceTypes = new Set();
+        for (const id of selectedIds) {
+            const item = data.find(prompt => prompt.id === id);
+            if (!item) continue;
+            const tags = [...(item.tags || [])];
+            if (!tags.some(itemTag => itemTag.toLowerCase() === tag.toLowerCase())) tags.push(tag);
+            const governanceType = governanceTypeForTags(tags);
+            if (governanceType && item.type !== governanceType) governanceTypes.add(governanceType);
+        }
+        for (const governanceType of governanceTypes) {
+            if (!confirm(`This governance tag requires the prompt type “${governanceType}”. Adjust selected prompt types automatically?`)) {
+                assignTagSelect.value = '';
+                return;
+            }
+        }
+
+        for (const id of selectedIds) {
+            const item = data.find(prompt => prompt.id === id);
+            if (!item) continue;
+            const tags = [...(item.tags || [])];
+            if (!tags.some(itemTag => itemTag.toLowerCase() === tag.toLowerCase())) tags.push(tag);
+            const governanceType = governanceTypeForTags(tags);
+            await updatePromptAPI(id, item.body, governanceType || item.type, tags, false);
+        }
+        document.querySelectorAll('.prompt-select:checked').forEach(input => { input.checked = false; });
         assignTagSelect.value = '';
+        await fetchPrompts();
     });
     filterCriticality.addEventListener('change', fetchPrompts);
     filterCategory.addEventListener('change', fetchPrompts);

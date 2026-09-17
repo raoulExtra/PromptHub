@@ -6,7 +6,7 @@
     <title>PromptHub — Library</title>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/frontend/static/show_prompts_style.css">
+    <link rel="stylesheet" href="/frontend/static/show_prompts_style.css?v=3.2">
 </head>
 <body>
 
@@ -69,6 +69,8 @@
                     <option value="all">All Categories</option>
                     <option value="User prompt">User Prompt</option>
                     <option value="System prompt">System Prompt</option>
+                    <option value="Agent prompt">Agent Prompt</option>
+                    <option value="Other">Other</option>
                 </select>
             </div>
 
@@ -80,8 +82,8 @@
                 <div class="stats-bar"><div class="stats-bar-fill"></div></div>
             </div>
             <div class="tag-assign-panel">
-                <span class="filter-label">ASSIGN TO PROMPT</span>
-                <select id="assignTagSelect"><option value="">Select tag</option></select>
+                <span class="filter-label">ASSIGN TAG TO PROMPT</span>
+                <select id="assignTagSelect"><option value="">Select a tag</option></select>
             </div>
         </div>
 
@@ -151,6 +153,8 @@
             <select id="editTypeSelect" class="edit-type-select">
                 <option value="System prompt">System Prompt</option>
                 <option value="User prompt">User Prompt</option>
+                <option value="Agent prompt">Agent Prompt</option>
+                <option value="Other">Other</option>
             </select>
             <label class="edit-type-label" for="editTagsInput">Edit tags</label>
             <input id="editTagsInput" class="edit-tags-input" type="text" placeholder="coding, criticality:high">
@@ -168,6 +172,6 @@
     <span>Done!</span>
 </div>
 
-<script src="/frontend/scripts/show_prompt_script.js"></script>
+<script src="/frontend/scripts/show_prompt_script.js?v=3.2"></script>
 </body>
 </html>
