@@ -29,7 +29,10 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS PromptHub (
                 tag VARCHAR(50),
                 category VARCHAR(50) NOT NULL,
                 tags TEXT NOT NULL DEFAULT '',
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                cycle TEXT NOT NULL DEFAULT 'none',
+                routine_confirmed INTEGER NOT NULL DEFAULT 0,
+                routine_period TEXT NOT NULL DEFAULT ''
     );""")
 conn.commit()
 
@@ -40,7 +43,13 @@ if "tags" not in existing_cols:
 if "updated_at" not in existing_cols:
     cursor.execute("ALTER TABLE PromptHub ADD COLUMN updated_at TEXT")
     cursor.execute("UPDATE PromptHub SET updated_at = date WHERE updated_at IS NULL")
-    conn.commit()
+if "cycle" not in existing_cols:
+    cursor.execute("ALTER TABLE PromptHub ADD COLUMN cycle TEXT NOT NULL DEFAULT 'none'")
+if "routine_confirmed" not in existing_cols:
+    cursor.execute("ALTER TABLE PromptHub ADD COLUMN routine_confirmed INTEGER NOT NULL DEFAULT 0")
+if "routine_period" not in existing_cols:
+    cursor.execute("ALTER TABLE PromptHub ADD COLUMN routine_period TEXT NOT NULL DEFAULT ''")
+conn.commit()
 
 cursor.execute("CREATE TABLE IF NOT EXISTS tags_registered (name TEXT PRIMARY KEY NOT NULL, color TEXT, updated_at TEXT NOT NULL)")
 tag_columns = {row[1] for row in cursor.execute("PRAGMA table_info(tags_registered)").fetchall()}
@@ -122,7 +131,34 @@ def criticality_from_tags(tags) -> str:
     return selected
 
 
+CYCLES = {"none", "hourly", "daily", "weekly", "monthly", "yearly"}
+
+
+def current_period(cycle: str) -> str:
+    now = datetime.now()
+    if cycle == "hourly": return now.strftime("%Y-%m-%d-%H")
+    if cycle == "daily": return now.strftime("%Y-%m-%d")
+    if cycle == "weekly": return now.strftime("%G-W%V")
+    if cycle == "monthly": return now.strftime("%Y-%m")
+    if cycle == "yearly": return now.strftime("%Y")
+    return ""
+
+
+def reset_routine_if_needed(prompt_id: int, cycle: str, period: str) -> bool:
+    if cycle == "none" or not period:
+        return False
+    row = cursor.execute("SELECT routine_period FROM PromptHub WHERE id = ?", (prompt_id,)).fetchone()
+    if row and row[0] and row[0] != period:
+        cursor.execute("UPDATE PromptHub SET routine_confirmed = 0, routine_period = ? WHERE id = ?", (period, prompt_id))
+        conn.commit()
+        return True
+    return False
+
+
 def row_to_prompt(d) -> dict:
+    cycle = d[8] if len(d) > 8 else "none"
+    period = d[10] if len(d) > 10 else ""
+    reset_routine_if_needed(d[0], cycle, current_period(cycle))
     return {
         "id": d[0],
         "title": d[1],
@@ -133,6 +169,8 @@ def row_to_prompt(d) -> dict:
         "tags": parse_tags(d[6] if len(d) > 6 else ""),
         "criticality": criticality_from_tags(d[6] if len(d) > 6 else ""),
         "updated_at": d[7] if len(d) > 7 else d[3],
+        "cycle": cycle,
+        "routine_confirmed": bool(d[9]) if len(d) > 9 else False,
     }
 
 
@@ -298,12 +336,15 @@ def create_prompt(prompt: PromptCreate):
     """Create a new prompt"""
     date_str = date.today().isoformat()
     tags = parse_tags(prompt.tags)
+    if prompt.cycle not in CYCLES:
+        raise ValueError("cycle must be none, hourly, daily, weekly, monthly, or yearly")
 
     cursor.execute("""
-        INSERT INTO PromptHub (prompt_name, prompt_body, date, tag, category, tags, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO PromptHub (prompt_name, prompt_body, date, tag, category, tags, updated_at, cycle, routine_confirmed, routine_period)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (prompt.title, prompt.body, date_str, prompt.favorite, prompt.type,
-          tags_to_db(tags), datetime.now().isoformat(timespec="seconds")))
+          tags_to_db(tags), datetime.now().isoformat(timespec="seconds"), prompt.cycle,
+          int(prompt.routine_confirmed), current_period(prompt.cycle)))
 
     conn.commit()
 
@@ -340,6 +381,15 @@ def update_prompt(prompt_id: int, prompt_update: PromptUpdate):
     if prompt_update.tags is not None:
         fields.append("tags = ?")
         values.append(tags_to_db(prompt_update.tags))
+    if prompt_update.cycle is not None:
+        if prompt_update.cycle not in CYCLES:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="invalid cycle")
+        fields.extend(["cycle = ?", "routine_period = ?"])
+        values.extend([prompt_update.cycle, current_period(prompt_update.cycle)])
+    if prompt_update.routine_confirmed is not None:
+        fields.append("routine_confirmed = ?")
+        values.append(int(prompt_update.routine_confirmed))
     fields.append("updated_at = ?")
     values.extend([datetime.now().isoformat(timespec="seconds"), prompt_id])
     cursor.execute(f"UPDATE PromptHub SET {', '.join(fields)} WHERE id = ?", values)

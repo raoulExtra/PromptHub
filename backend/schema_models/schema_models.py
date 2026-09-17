@@ -8,6 +8,8 @@ class PromptCreate(BaseModel):
     favorite: str
     type: str
     tags: List[str] = Field(default_factory=list)
+    cycle: str = "none"
+    routine_confirmed: bool = False
 
 
 class DerivedPrompt(BaseModel):
@@ -26,12 +28,16 @@ class Prompt(PromptCreate):
     date: str
     criticality: str = "normal"
     updated_at: str = ""
+    cycle: str = "none"
+    routine_confirmed: bool = False
 
 # Pydantic model for update request
 class PromptUpdate(BaseModel):
     body: str
     type: str | None = None
     tags: list[str] | None = None
+    cycle: str | None = None
+    routine_confirmed: bool | None = None
 
 
 class TagCreate(BaseModel):

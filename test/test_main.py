@@ -23,7 +23,10 @@ def client(tmp_path, monkeypatch):
             tag VARCHAR(50),
             category VARCHAR(50) NOT NULL,
             tags TEXT NOT NULL DEFAULT '',
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            cycle TEXT NOT NULL DEFAULT 'none',
+            routine_confirmed INTEGER NOT NULL DEFAULT 0,
+            routine_period TEXT NOT NULL DEFAULT ''
         )"""
     )
     cursor.execute("CREATE TABLE tags_registered (name TEXT PRIMARY KEY NOT NULL, color TEXT, updated_at TEXT NOT NULL)")
