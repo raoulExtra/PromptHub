@@ -16,7 +16,7 @@ No cloud dependencies. No subscriptions. Just your prompts, organized.
 
 ## 📸 Preview
 
-![PromptHub Screenshot](assets/Screenshot%20from%202026-03-23%2015-00-07.png)
+![PromptHub v3.1 Screenshot](assets/prompthub-v3.1.png)
 
 > *The PromptHub v3.1 interface: clean, focused, and ready to capture your best AI prompts.*
 
